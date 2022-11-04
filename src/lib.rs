@@ -1,4 +1,4 @@
-pub mod tui;
+pub mod przzi_tui;
 
 use clap::{Parser};
 use url::{Url};
@@ -7,7 +7,7 @@ use serde::{Serialize, Deserialize};
 use select::document::Document;
 use select::predicate::{Attr, Name, Predicate};
 use std::io::Write;
-use tui::PRZZITUI;
+use przzi_tui::PRZZITUI;
 
 
 const CLI_HELP: &str = "A TUI to partially view/download research papers.
@@ -94,8 +94,7 @@ pub struct Query {
 
 #[derive(Deserialize)]
 pub struct PRZZIResult {
-    #[serde(rename = "DOI")]
-    pub doi: Url,
+    pub url: Url,
     pub title: String,
     #[serde(rename = "abstract")]
     pub abs: String,
@@ -105,15 +104,17 @@ pub struct PRZZIResult {
 
 impl PRZZIResult {
     pub fn new(papers:serde_json::Value) -> Self {
-        let mut doi = papers["externalIds"]["DOI"].to_string().replace("\"", "");
-        doi.insert_str(0, "https://doi.org/");
-        let doi = Url::parse(&doi).unwrap();
+        let url = papers["externalIds"]["ArXiv"].to_string().replace("\"", "");
+        let url = format!("https://arxiv.org/pdf/{}.pdf", url);
+        let url = Url::parse(&url).unwrap();
         let title = papers["title"].to_string().replace("\"", "");
         let abs = papers["abstract"].to_string().replace("\"", "");
         let year = papers["year"].to_string().parse::<usize>().unwrap();
-        let authors = papers["authors"].as_array().unwrap().iter().map(|x| x["name"].to_string().replace("\"", "")).collect();
+        let authors : Vec<String> = papers["authors"].as_array().unwrap().iter().map(|x| x["name"].to_string().replace("\"", "")).collect();
+        // select 4 authors
+        let authors = authors.iter().take(4).map(|x| x.to_string()).collect();
         PRZZIResult {
-            doi,
+            url,
             title,
             abs,
             year,
@@ -153,15 +154,10 @@ impl PRZZI {
             enable_raw_mode().unwrap();
             let results : Vec<PRZZIResult> = self.search()?;
             self.tui.set_results(results);
-            self.tui.print_results();
-            loop {
-                if let Ok(false) = self.tui.handle_input() {
-                    disable_raw_mode().unwrap();
-                    break;
-                }
-            }
+            self.tui.start_ui()?;
+            disable_raw_mode().unwrap();
         } else {
-            if let Err(_e) = self.download() {
+            if let Err(_e) = self.download_doi() {
                 return Err(PRZZIError {
                     msg: "Download failed! :-( \n Please Check the DOI or raise an issue on github".to_string(),
                 });
@@ -187,7 +183,7 @@ impl PRZZI {
         Ok(results)
     }
 
-    pub fn download(&self) -> Result<(), PRZZIError> {
+    pub fn download_doi(&self) -> Result<(), PRZZIError> {
         let client = reqwest::blocking::Client::new();
         let doi_url = self.download_url.join(self.download.as_ref().unwrap().path())?;
         let res = client.get(doi_url)
@@ -211,9 +207,7 @@ impl PRZZI {
                 msg: "Download failed! :-( \n Please Check the DOI or raise an issue on github".to_string(),
             });
         }
-        // get filename
         let filename = res.url().path_segments().unwrap().last().unwrap();
-        // save file
         let mut file = std::fs::File::create(filename)?;
         file.write_all(res.bytes()?.as_ref())?;
         Ok(())
