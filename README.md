@@ -20,6 +20,16 @@ A simple TUI to search Research Papers
 cargo install paperazzi
 ```
 
+### Build Manually
+
+```
+cargo build
+
+```
+
+For linux the binary is `target/debug/paperazzi`
+For windows the exe is `target/debug/paperazzi.exe`
+
 ## Run Paperazzi
 
 ```
@@ -30,6 +40,18 @@ Example
 
 ```
 paperazzi "GAN"
+```
+
+## Download a paper
+
+```
+paperazzi -d <doi url>
+```
+
+Example 
+
+```
+paperazzi -d https://doi.org/10.1109/ICCV.2017.405
 ```
 
 ## Options

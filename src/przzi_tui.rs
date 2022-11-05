@@ -8,21 +8,98 @@ use crossterm::{
 };
 use tui::{
     backend::{Backend, CrosstermBackend},
-    layout::{Constraint, Direction, Layout, Alignment},
-    widgets::{Block, Borders, Paragraph, Wrap, BorderType},
+    layout::{Constraint, Direction, Layout, Alignment, Rect}, 
+    widgets::{Block, Borders, Paragraph, Wrap, BorderType, Clear},
     Terminal,
     Frame,
     text::{Span, Spans},
     style::{Style, Color, Modifier}
 };
-//use url::Url;
-use std::io::{stdout, Write};
+use url::Url;
+use std::io::stdout;
 use crate::PRZZIError;
 use crate::PRZZIResult;
+use crate::PRZZI;
+
+
+struct Popup {
+    show_popup: bool,
+    popup_msg: String,
+    popup_type: String, //Info by default
+    popup_color: Color // yellow for Info, Green for Success and Red for Error
+}
+
+impl Popup {
+    pub fn new() -> Self {
+        Self {
+            show_popup: false,
+            popup_msg: "".to_string(),
+            popup_type: "Info".to_string(),
+            popup_color: Color::Yellow,
+        }
+    }
+
+    fn centered_rect(&self, percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+        let popup_layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(
+                [
+                    Constraint::Percentage((100 - percent_y) / 2),
+                    Constraint::Percentage(percent_y),
+                    Constraint::Percentage((100 - percent_y) / 2),
+                ]
+                .as_ref(),
+         )
+        .split(r);
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(
+                [
+                    Constraint::Percentage((100 - percent_x) / 2),
+                    Constraint::Percentage(percent_x),
+                    Constraint::Percentage((100 - percent_x) / 2),
+                ]
+                .as_ref(),
+            )
+            .split(popup_layout[1])[1]
+    }
+
+    fn get_para(&self) -> Paragraph{
+        Paragraph::new(self.popup_msg.as_ref())
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                .title(Span::styled(self.popup_type.clone(), Style::default().fg(self.popup_color)))
+                .borders(Borders::ALL)
+                .style(Style::default().bg(Color::White).fg(Color::Black))
+            )
+            .wrap(Wrap {trim: true})
+    }
+
+    fn close(&mut self){
+        self.show_popup = false;
+    }
+
+    fn open(&mut self, msg: String, popup_type: String){
+        if popup_type == "Error!"{
+            self.popup_color = Color::Red;
+        }
+        else if popup_type == "Info" {
+            self.popup_color = Color::Yellow;
+        }
+        else if popup_type == "Success" {
+            self.popup_color = Color::Green;
+        }
+        self.popup_type = popup_type;
+        self.popup_msg = msg;
+        self.show_popup = true;
+    }
+}
 
 pub struct PRZZITUI {
     results: Vec<PRZZIResult>,
     result_index: usize,
+    popup: Popup,
 }
 
 impl PRZZITUI {
@@ -30,6 +107,7 @@ impl PRZZITUI {
         Self {
             results: Vec::new(),
             result_index: 0,
+            popup: Popup::new()
         }
     }
     
@@ -71,6 +149,13 @@ impl PRZZITUI {
         rect.render_widget(abs, chunks[1]);
         let footer = self.draw_footer();
         rect.render_widget(footer, chunks[2]);
+        if self.popup.show_popup{
+            let para = self.popup.get_para();
+            let area = self.popup.centered_rect(60, 20, size);
+            rect.render_widget(Clear, area);
+            rect.render_widget(para, area);
+        }
+
     }
     
     fn draw_title<'a>(&'a self) -> Paragraph<'a> {
@@ -137,7 +222,7 @@ impl PRZZITUI {
 
     
     fn draw_footer<'a>(&'a self) -> Paragraph<'a> {
-        let text = Spans::from(vec![
+        let mut text = vec![Spans::from(vec![
             Span::styled(
                 "p: ",
                 Style::default()
@@ -180,14 +265,33 @@ impl PRZZITUI {
                 .fg(Color::Rgb(213, 196, 161))
             ),
             Span::styled(
-                "Download paper (In Development)",
+                "Download paper",
                 Style::default().fg(Color::Green)
             ),
-        ]);
+        ])];
+        if self.popup.show_popup {
+            text.push(
+                Spans::from(vec![
+                    Span::raw(
+                        "    ",
+                    ),
+                    Span::styled(
+                        "q: ",
+                        Style::default()
+                        .fg(Color::Rgb(213, 196, 161))
+                    ),
+                    Span::styled(
+                        "Close Popup",
+                        Style::default().fg(Color::Green)
+                    ),
+                ])  
+            )
+        }
         Paragraph::new(text.clone())
             .alignment(Alignment::Center)
             .wrap(Wrap {trim: true})    
     }
+
     pub fn start_ui(&mut self) -> Result<(), PRZZIError> {
         let mut stdout = stdout();
         execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -195,8 +299,8 @@ impl PRZZITUI {
         backend.execute(SetTitle("Paperazzi"))?;
         let mut terminal = Terminal::new(backend)?;
         terminal.clear()?;
-        terminal.draw(|f| self.draw(f))?;
         loop {
+            terminal.draw(|f| self.draw(f))?;
             match self.read_key()? {
                 KeyEvent {
                     code: KeyCode::Char('c'),
@@ -215,8 +319,8 @@ impl PRZZITUI {
                     modifiers: KeyModifiers::NONE
                 } => {
                     if self.result_index < self.results.len() - 1 {
+                        self.popup.close();
                         self.result_index += 1;
-                        terminal.draw(|f| self.draw(f))?;
                     }
                 },
                 KeyEvent {
@@ -224,63 +328,47 @@ impl PRZZITUI {
                     modifiers: KeyModifiers::NONE
                 } => {
                    if self.result_index > 0 {
+                       self.popup.close();
                        self.result_index -= 1;
-                       terminal.draw(|f| self.draw(f))?;
                    }
                 },
-                KeyEvent {
+               KeyEvent {
                     code: KeyCode::Char('r'),
                     modifiers: KeyModifiers::CONTROL
                 } => {
                     if webbrowser::open(&self.results[self.result_index].url.as_str()).is_err() {
-                       let block = Block::default().title("Error!").borders(Borders::ALL);
-                       let mut frame = terminal.get_frame();
-                       let size = frame.size();
-                       let popup_layout = Layout::default()
-                           .direction(Direction::Vertical)
-                           .constraints(
-                                [
-                                    Constraint::Percentage(40),
-                                    Constraint::Percentage(20),
-                                    Constraint::Percentage(40),
-                                ].as_ref(),
-                            )
-                           .split(size);
-                       let area = Layout::default()
-                           .direction(Direction::Horizontal)
-                           .constraints(
-                               [
-                                    Constraint::Percentage(20),
-                                    Constraint::Percentage(60),
-                                    Constraint::Percentage(20),
-                               ].as_ref(),
-                            )
-                           .split(popup_layout[1])[1];
-                       frame.render_widget(block, area)
+                        self.popup.open("Redirect failed! Please try again".to_string(), "Error!".to_string());
                     }
                 },
-                /*
                 KeyEvent {
                     code: KeyCode::Char('d'),
                     modifiers: KeyModifiers::CONTROL
                 } => {
-                    let client = reqwest::blocking::Client::new();
-                    let url = self.results[self.result_index].url.as_str();
-                    let down_url = Url::parse(url).unwrap();
-                    println!("{}", down_url);
-                    let res = client.get(down_url)
-                        // user agent
-                        .header("User-Agent", "Paperazzi")
-                        .send()?;  
-                    let filename = res.url().path_segments().unwrap().last().unwrap();
-                    let mut file = std::fs::File::create(filename)?;
-                    file.write_all(res.bytes()?.as_ref())?;
-                    println!("Done");
+                    self.popup.open("Attempting to Download".to_string(), "Info".to_string());
+                    terminal.draw(|f| self.draw(f))?;
+                    if self.results[self.result_index].url.to_string().contains("doi") {
+                        let mut download_url = "https://sci-hub.wf/".to_string();
+                        download_url.push_str(self.results[self.result_index].url.as_ref());
+                        let doi_url =  Url::parse(&download_url)?;
+                        if let Err(_e) = PRZZI::download_doi(doi_url) {
+                            self.popup.open("Download failed! This paper is not available to download yet :( if you think this is wrong, raise a issue :) \n Please try redirecting instead".to_string(), "Error!".to_string());
+                        }
+                        else{
+                            self.popup.open("Download Complete :) !!".to_string(), "Success".to_string());
+
+                        }
+                    }
+                    else {
+                        self.popup.open("This paper doesnt have a valid DOI so a download isnt possible just yet :( If you think this is wrong, feel free to raise an issue \n Please try redirect instead".to_string(), "Error!".to_string());
+                    }
                 },
-                */
-                _ => {
-                    continue;
-                }
+                KeyEvent {
+                    code: KeyCode::Char('q'),
+                    modifiers: KeyModifiers::NONE
+                } => {
+                    self.popup.close();
+                },
+                _ => {}
             }
             
         }

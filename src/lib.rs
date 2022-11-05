@@ -11,7 +11,7 @@ use przzi_tui::PRZZITUI;
 
 
 const CLI_HELP: &str = "A TUI to partially view/download research papers.
-Search Results are taken from Google Scholar.";
+Search Results are taken from Semantic Scholar.";
 
 #[derive(Parser)]
 #[clap(version = "0.1.0", author = "lucasace", about = CLI_HELP)]
@@ -104,14 +104,22 @@ pub struct PRZZIResult {
 
 impl PRZZIResult {
     pub fn new(papers:serde_json::Value) -> Self {
-        let url = papers["externalIds"]["ArXiv"].to_string().replace("\"", "");
-        let url = format!("https://arxiv.org/pdf/{}.pdf", url);
-        let url = Url::parse(&url).unwrap();
+        let mut paper_url = papers["externalIds"]["DOI"].to_string().replace("\"", "");
+        if paper_url != "null" {
+            paper_url = format!("https://doi.org/{}", paper_url);
+        }
+        else{
+            paper_url = papers["externalIds"]["ArXiv"].to_string().replace("\"", "");
+            paper_url = format!("https://arxiv.org/pdf/{}.pdf", paper_url);
+        }
+        if paper_url.contains("null") {
+            paper_url = papers["url"].to_string().replace("\"", "");
+        }
+        let url = Url::parse(&paper_url).unwrap();
         let title = papers["title"].to_string().replace("\"", "");
         let abs = papers["abstract"].to_string().replace("\"", "");
         let year = papers["year"].to_string().parse::<usize>().unwrap();
         let authors : Vec<String> = papers["authors"].as_array().unwrap().iter().map(|x| x["name"].to_string().replace("\"", "")).collect();
-        // select 4 authors
         let authors = authors.iter().take(4).map(|x| x.to_string()).collect();
         PRZZIResult {
             url,
@@ -126,7 +134,6 @@ impl PRZZIResult {
 pub struct PRZZI {
     tui: PRZZITUI,
     search_url: Url,
-    download_url: Url,
     query: Option<String>,
     num_results: usize,
     download: Option<Url>,
@@ -142,7 +149,6 @@ impl PRZZI {
         Ok(PRZZI {
             tui: PRZZITUI::new(),
             search_url: Url::parse("https://api.semanticscholar.org/graph/v1/paper/search")?,
-            download_url: Url::parse("https://sci-hub.wf/")?,
             query: config.query,
             num_results: config.num_results,
             download: config.download,
@@ -157,10 +163,16 @@ impl PRZZI {
             self.tui.start_ui()?;
             disable_raw_mode().unwrap();
         } else {
-            if let Err(_e) = self.download_doi() {
+            let download_url =  Url::parse("https://sci-hub.wf/")?;
+            let doi_url = download_url.join(self.download.as_ref().unwrap().path())?;
+            println!("Downloading...!");
+            if let Err(_e) = PRZZI::download_doi(doi_url) {
                 return Err(PRZZIError {
                     msg: "Download failed! :-( \n Please Check the DOI or raise an issue on github".to_string(),
                 });
+            }
+            else {
+                println!("Download complete!!")
             }
         }
        Ok(())
@@ -183,10 +195,10 @@ impl PRZZI {
         Ok(results)
     }
 
-    pub fn download_doi(&self) -> Result<(), PRZZIError> {
+
+    pub fn download_doi(doi_url: Url) -> Result<(), PRZZIError> {
         let client = reqwest::blocking::Client::new();
-        let doi_url = self.download_url.join(self.download.as_ref().unwrap().path())?;
-        let res = client.get(doi_url)
+        let res = client.get(doi_url.clone())
             .send()?;
         let document = Document::from(res.text()?.as_str());
         // Need better way to do this
@@ -196,10 +208,11 @@ impl PRZZI {
                 msg: "Download failed! :-( \n Please Check the DOI or raise an issue on github".to_string(),
             });
         }
-        println!("Downloading...");
         let link = document.find(Attr("id", "buttons").descendant(Name("button"))).next().unwrap();
         let link = link.attr("onclick").unwrap().replace("location.href='", "").replace("'", "");
-        let down_url = self.download_url.join(&link)?;
+        let down_url = doi_url.to_string();
+        let down_url = Url::parse(down_url.split("https://doi.org").next().as_ref().unwrap())?;
+        let down_url = down_url.join(&link)?;
         let res = client.get(down_url)
             .send()?;
         if res.headers().get("Content-Type").unwrap() != "application/pdf" {
