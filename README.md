@@ -14,6 +14,20 @@ A simple TUI to search Research Papers
 
 ## Install
 
+### Download from Github
+
+Go to [Releases](https://github.com/lucasace/paperazzi/releases/latest) and download the latest binary/executable
+
+For Linux the binary is `paperazzi`
+
+For windows the executable is `paperazzi.exe`
+
+and Run as
+
+`./paperazzi` in Linux
+
+`./paperazzi.exe` in Windows
+
 ### From Cargo
 
 ```
@@ -27,9 +41,9 @@ cargo build
 
 ```
 
-For linux the binary is `target/debug/paperazzi`
+For Linux the binary is `target/debug/paperazzi`
 
-For windows the exe is `target/debug/paperazzi.exe`
+For Windows the exe is `target/debug/paperazzi.exe`
 
 ## Run Paperazzi
 

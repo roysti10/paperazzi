@@ -14,7 +14,7 @@ const CLI_HELP: &str = "A TUI to partially view/download research papers.
 Search Results are taken from Semantic Scholar.";
 
 #[derive(Parser)]
-#[clap(version = "0.1.0", author = "lucasace", about = CLI_HELP)]
+#[clap(version = "0.1.1", author = "lucasace", about = CLI_HELP)]
 pub struct PRZZIConfig {
     /// Query to search for
     #[clap()]
