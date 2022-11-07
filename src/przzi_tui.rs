@@ -63,7 +63,7 @@ impl Popup {
             )
             .split(popup_layout[1])[1]
     }
-
+    
     fn get_para(&self) -> Paragraph{
         Paragraph::new(self.popup_msg.as_ref())
             .alignment(Alignment::Center)
@@ -99,6 +99,7 @@ impl Popup {
 pub struct PRZZITUI {
     results: Vec<PRZZIResult>,
     result_index: usize,
+    scroll: u16,
     popup: Popup,
 }
 
@@ -107,6 +108,7 @@ impl PRZZITUI {
         Self {
             results: Vec::new(),
             result_index: 0,
+            scroll: 0 as u16,
             popup: Popup::new()
         }
     }
@@ -150,8 +152,8 @@ impl PRZZITUI {
         let footer = self.draw_footer();
         rect.render_widget(footer, chunks[2]);
         if self.popup.show_popup{
-            let para = self.popup.get_para();
-            let area = self.popup.centered_rect(60, 20, size);
+            let para = self.popup.get_para(); 
+            let area = self.popup.centered_rect(80, 30, size);
             rect.render_widget(Clear, area);
             rect.render_widget(para, area);
         }
@@ -217,7 +219,8 @@ impl PRZZITUI {
                 .borders(Borders::ALL)
                 .border_type(BorderType::Double)
             )
-            .wrap(Wrap {trim: true})    
+            .wrap(Wrap {trim: true})
+            .scroll((self.scroll, 0))
     }
 
     
@@ -253,7 +256,7 @@ impl PRZZITUI {
                 .fg(Color::Rgb(213, 196, 161))
             ),
             Span::styled(
-                "Open in browser\t",
+                "Open in browser",
                 Style::default().fg(Color::Green)
             ),
             Span::raw(
@@ -268,6 +271,17 @@ impl PRZZITUI {
                 "Download paper",
                 Style::default().fg(Color::Green)
             ),
+            Span::raw(
+                "    "
+            ),
+            Span::styled(
+                "↓/↑: ",
+                Style::default().fg(Color::Rgb(213, 196, 161))
+            ),
+            Span::styled(
+                "Scroll Abstract",
+                Style::default().fg(Color::Green)
+            )
         ])];
         if self.popup.show_popup {
             text.push(
@@ -367,6 +381,20 @@ impl PRZZITUI {
                     modifiers: KeyModifiers::NONE
                 } => {
                     self.popup.close();
+                },
+                KeyEvent {
+                    code: KeyCode::Up,
+                    modifiers: KeyModifiers::NONE
+                } => {
+                    if self.scroll > 0 {
+                        self.scroll-=1;
+                    }
+                },
+                KeyEvent {
+                    code: KeyCode::Down,
+                    modifiers: KeyModifiers::NONE
+                } => {
+                    self.scroll+=1;
                 },
                 _ => {}
             }

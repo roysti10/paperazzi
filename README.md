@@ -28,6 +28,7 @@ cargo build
 ```
 
 For linux the binary is `target/debug/paperazzi`
+
 For windows the exe is `target/debug/paperazzi.exe`
 
 ## Run Paperazzi
